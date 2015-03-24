@@ -1,0 +1,47 @@
+#include "NXCDefs.h"
+
+#define ERROR 150
+
+int BLACK_GREY_THRESHOLD;
+int count;
+
+task main() {
+
+     count = 0;
+     SetSensorLight(IN_1);
+    
+     RotateMotorEx(OUT_BC, 50, 360, 0, true, true);
+     RotateMotorEx(OUT_BC, 50, 180, 100, true, true);
+
+     BLACK_GREY_THRESHOLD = SENSOR_1 + ERROR;
+     
+     moveForwardBlack();
+     RotateMotorEx(OUT_BC, 50, 180, 100, true, true):
+}
+
+
+void moveForwardBlack() {
+     
+     OnFwdReg(OUT_BC, 50, OUT_REGMODE_SYNC);
+     count++;
+     if (count == 15) {
+
+        return;
+     }
+     while (SENSOR_1 < BLACK_GREY_THRESHOLD) {}
+     moveFowardWhite();
+
+}
+
+void moveForwardWhite() {
+
+     OnFwdReg(OUT_BC, 50, OUT_REGMODE_SYNC);
+     while (SENSOR_1 > BLACK_GREY_THRESHOLD) {}
+     moveForwardBlack();
+}
+
+void playTone() {
+
+     PlayToneEx(523, 400, 8, FALSE); Wait(200);
+     PlayToneEx(784, 1000, 8, FALSE); Wait(200);
+}
