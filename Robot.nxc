@@ -1,50 +1,112 @@
 #include "NXCDefs.h"
 
-#define ERROR 150
+#define BLACK_ERROR 80
+#define WHITE_ERROR 20
+#define SPEED 20
 
-int BLACK_GREY_THRESHOLD;
+#define ROTATE_ATTEMPTS 20
+
+int BLACK_THRESHOLD;
+int WHITE_THRESHOLD;
 int count;
 
 void moveForwardBlack(void);
 void moveForwardWhite(void);
+void moveToFinish(void);
+
+enum COLOUR{WHITE, BLACK};
+
+/**
+ * Corrects the path of the robot if it is detected to be of course. Parameter from indicates what tile it was on when it left the path.  
+ */
+void correctPath(COLOUR from);
 
 task main() {
 
-     count = 0;
+     count = 1;
      SetSensorLight(IN_1);
-    
-     RotateMotorEx(OUT_BC, 50, 360, 0, true, true);
-     RotateMotorEx(OUT_BC, 50, 180, 100, true, true);
+     SetSensorTouch(IN_2);
+     SetSensorTouch(IN_3);
+     SetSensorUltrasonic(IN_4);
+     RotateMotorEx(OUT_BC, SPEED, 360, 0, true, true);
+     RotateMotorEx(OUT_BC, SPEED, 180, 100, true, true);
 
-     BLACK_GREY_THRESHOLD = SENSOR_1 + ERROR;
-     
-     moveForwardBlack();
-     RotateMotorEx(OUT_BC, 50, 180, 100, true, true);
+     BLACK_THRESHOLD = SENSOR_1 + BLACK_ERROR;
+
+     while(SENSOR_1 > BLACK_THRESHOLD){}
+
+     WHITE_THRESHOLD = SENSOR_1 - WHITE_ERROR;
+
+     moveForwardWhite();
+     RotateMotorEx(OUT_BC, SPEED, 180, 100, true, true);
+
+     moveToFinish();     
 }
 
+void moveToFinish(){
+     OnFwdReg(OUT_BC, SPEED, OUT_REGMODE_SYNC);
+     while(SENSOR_2 == 0
+                    && SENSOR_3 == 0
+                    && SensorUS(IN_4) > 10){}
+     OnFwdReg(OUT_BC, 0, OUT_REGMODE_SYNC);
+}
 
 void moveForwardBlack() {
      
-     OnFwdReg(OUT_BC, 50, OUT_REGMODE_SYNC);
+     OnFwdReg(OUT_BC, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
      count++;
      if (count == 15) {
 
         return;
      }
-     while (SENSOR_1 < BLACK_GREY_THRESHOLD) {}
-     moveForwardWhite();
-
+     while (SENSOR_1 < BLACK_THRESHOLD) {}
+     if(SENSOR_1 < WHITE_THRESHOLD){
+         // on gray
+         correctPath(BLACK);   
+     }else{
+         moveForwardWhite();
+     }
 }
 
 void moveForwardWhite() {
 
-     OnFwdReg(OUT_BC, 50, OUT_REGMODE_SYNC);
-     while (SENSOR_1 > BLACK_GREY_THRESHOLD) {}
-     moveForwardBlack();
+     OnFwdReg(OUT_BC, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
+     while (SENSOR_1 > WHITE_THRESHOLD) {}
+     if(SENSOR_1 > BLACK_THRESHOLD){
+         correctPath(WHITE);
+     }else{
+         moveForwardBlack();
+     }
+}
+
+void correctPath(COLOUR from){
+     OnFwdReg(OUT_B, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
+     OnFwdReg(OUT_C, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
+     int count = 0;
+     while(SENSOR_1 > BLACK_THRESHOLD && SENSOR_1 < WHITE_THRESHOLD && count < ROTATE_ATTEMPTS){
+          count++;
+          Wait(10);
+     }
+     if(count == ROTATE_ATTEMPTS){
+          OnRevReg(OUT_B, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
+          OnFwdReg(OUT_C, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
+          while(SENSOR_1 > BLACK_THRESHOLD && SENSOR_1 < WHITE_THRESHOLD){
+              Wait(10);
+          }
+     }
+     Wait(50);
+     if(SENSOR_1 <= BLACK_THRESHOLD){
+         if(from == BLACK){
+             count--;
+         }
+         moveForwardBlack();
+     }else{
+         moveForwardWhite();
+     }
 }
 
 void playTone() {
 
-     PlayToneEx(523, 400, 8, FALSE); Wait(200);
-     PlayToneEx(784, 1000, 8, FALSE); Wait(200);
+     PlayToneEx(523, 400, 1, FALSE); Wait(200);
+     PlayToneEx(784, 1000, 1, FALSE); Wait(200);
 }
