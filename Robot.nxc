@@ -1,50 +1,72 @@
 #include "NXCDefs.h"
 
-#define BLACK_ERROR 80
-#define WHITE_ERROR 20
+#define BLACK_ERROR 12
+#define WHITE_ERROR 2
+#define GREY_ERROR 2
 #define SPEED 20
+#define AVG_COUNT 5
+#define AVG_WAIT 40
 
 #define ROTATE_ATTEMPTS 20
 
 int BLACK_THRESHOLD;
-int WHITE_THRESHOLD;
+int WHITE_AVG;
+int GREY_AVG;
 int count;
 
 void moveForwardBlack(void);
 void moveForwardWhite(void);
 void moveToFinish(void);
+void drawToScreen(void);
+float calculateTileAvg(void);
 
 enum COLOUR{WHITE, BLACK};
 
 /**
- * Corrects the path of the robot if it is detected to be of course. Parameter from indicates what tile it was on when it left the path.  
+ * Corrects the path of the robot if it is
+ *detected to be of course. Parameter from
+ *indicates what tile it was on when it left the path.  
  */
 void correctPath(COLOUR from);
 
 task main() {
 
+     int grey_avg = 0;
+     int white_avg = 0;
+     int avg_count = 1;
      count = 1;
      SetSensorLight(IN_1);
      SetSensorTouch(IN_2);
      SetSensorTouch(IN_3);
      SetSensorUltrasonic(IN_4);
      RotateMotorEx(OUT_BC, SPEED, 360, 0, true, true);
+     BLACK_THRESHOLD = SENSOR_1 + BLACK_ERROR; // This value accounts for the L sensor value of grey strip.
+
+     OnFwdReg(OUT_BC, 40, OUT_REGMODE_SPEED);
+     /*
+      * Calculate the average sensor value for
+      * a specified amount of  values over the grey tile.
+      */
+     GREY_AVG = calculateTileAvg() + GREY_ERROR;
+     
+     OnRevReg(OUT_BC, 40, OUT_REGMODE_SPEED);
+     while (SENSOR_1 > BLACK_THRESHOLD) {}
+     Wait(2000);
      RotateMotorEx(OUT_BC, SPEED, 180, 100, true, true);
 
-     BLACK_THRESHOLD = SENSOR_1 + BLACK_ERROR;
-
-     while(SENSOR_1 > BLACK_THRESHOLD){}
-
-     WHITE_THRESHOLD = SENSOR_1 - WHITE_ERROR;
-
+     avg_count = 1;
+     OnFwdReg(OUT_BC, 10, OUT_REGMODE_SPEED);
+ 
+     WHITE_AVG = calculateTileAvg() - WHITE_ERROR;
+     
      moveForwardWhite();
      RotateMotorEx(OUT_BC, SPEED, 180, 100, true, true);
-
-     moveToFinish();     
+   
 }
 
+
 void moveToFinish(){
-     OnFwdReg(OUT_BC, SPEED, OUT_REGMODE_SYNC);
+     OnFwdReg(OUT_BC, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
      while(SENSOR_2 == 0
                     && SENSOR_3 == 0
                     && SensorUS(IN_4) > 10){}
@@ -60,7 +82,7 @@ void moveForwardBlack() {
         return;
      }
      while (SENSOR_1 < BLACK_THRESHOLD) {}
-     if(SENSOR_1 < WHITE_THRESHOLD){
+     if(SENSOR_1 < WHITE_AVG){
          // on gray
          correctPath(BLACK);   
      }else{
@@ -68,10 +90,28 @@ void moveForwardBlack() {
      }
 }
 
+float calculateTileAvg() {
+
+     int count = 1;
+     int avg = 0;
+     while(count <= AVG_COUNT) {
+
+        if (SENSOR_1 > BLACK_THRESHOLD) {
+
+           Wait(AVG_WAIT);
+           avg += SENSOR_1;
+           count++;
+        }
+     }
+     avg /= count;
+
+     return avg;
+}
+
 void moveForwardWhite() {
 
      OnFwdReg(OUT_BC, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
-     while (SENSOR_1 > WHITE_THRESHOLD) {}
+     while (SENSOR_1 > WHITE_AVG) {}
      if(SENSOR_1 > BLACK_THRESHOLD){
          correctPath(WHITE);
      }else{
@@ -83,14 +123,14 @@ void correctPath(COLOUR from){
      OnFwdReg(OUT_B, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
      OnFwdReg(OUT_C, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
      int count = 0;
-     while(SENSOR_1 > BLACK_THRESHOLD && SENSOR_1 < WHITE_THRESHOLD && count < ROTATE_ATTEMPTS){
+     while(SENSOR_1 > BLACK_THRESHOLD && SENSOR_1 < WHITE_AVG && count < ROTATE_ATTEMPTS){
           count++;
           Wait(10);
      }
      if(count == ROTATE_ATTEMPTS){
           OnRevReg(OUT_B, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
           OnFwdReg(OUT_C, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
-          while(SENSOR_1 > BLACK_THRESHOLD && SENSOR_1 < WHITE_THRESHOLD){
+          while(SENSOR_1 > BLACK_THRESHOLD && SENSOR_1 < WHITE_AVG){
               Wait(10);
           }
      }
@@ -107,6 +147,6 @@ void correctPath(COLOUR from){
 
 void playTone() {
 
-     PlayToneEx(523, 400, 1, FALSE); Wait(200);
-     PlayToneEx(784, 1000, 1, FALSE); Wait(200);
+     PlayToneEx(523, 400, 2, FALSE); Wait(200);
+     PlayToneEx(784, 1000, 2, FALSE); Wait(200);
 }
