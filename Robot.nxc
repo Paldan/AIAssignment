@@ -1,18 +1,20 @@
 #include "NXCDefs.h"
 
 #define BLACK_ERROR 12
-#define WHITE_ERROR 2
-#define GREY_ERROR 2
 #define SPEED 20
 #define AVG_COUNT 5
 #define AVG_WAIT 40
 
 #define ROTATE_ATTEMPTS 20
+#define ROTATE_CORRECT_WAIT 50
+#define ROTATE_WHITE_CORRECT_WAIT 100
 
-int BLACK_THRESHOLD;
+
+int BLACK_GREY_THRESHOLD;
 int WHITE_AVG;
 int GREY_AVG;
-int count;
+int black_count;
+int WHITE_GREY_THRESHOLD;
 
 void moveForwardBlack(void);
 void moveForwardWhite(void);
@@ -29,41 +31,50 @@ enum COLOUR{WHITE, BLACK};
  */
 void correctPath(COLOUR from);
 
-task main() {
+void debugPrint(float avg);
 
-     int grey_avg = 0;
-     int white_avg = 0;
-     int avg_count = 1;
-     count = 1;
+task main() {
+     black_count = 1;
      SetSensorLight(IN_1);
      SetSensorTouch(IN_2);
      SetSensorTouch(IN_3);
      SetSensorUltrasonic(IN_4);
      RotateMotorEx(OUT_BC, SPEED, 360, 0, true, true);
-     BLACK_THRESHOLD = SENSOR_1 + BLACK_ERROR; // This value accounts for the L sensor value of grey strip.
+     BLACK_GREY_THRESHOLD = SENSOR_1 + BLACK_ERROR; // This value accounts for the L sensor value of grey strip.
 
-     OnFwdReg(OUT_BC, 40, OUT_REGMODE_SPEED);
+     OnFwdReg(OUT_BC, 20, OUT_REGMODE_SPEED);
      /*
       * Calculate the average sensor value for
       * a specified amount of  values over the grey tile.
       */
-     GREY_AVG = calculateTileAvg() + GREY_ERROR;
+     GREY_AVG = calculateTileAvg();
      
-     OnRevReg(OUT_BC, 40, OUT_REGMODE_SPEED);
-     while (SENSOR_1 > BLACK_THRESHOLD) {}
-     Wait(2000);
+     OnRevReg(OUT_BC, 20, OUT_REGMODE_SPEED);
+     while (SENSOR_1 > BLACK_GREY_THRESHOLD) {}
+     Wait(200);
+     // turn
      RotateMotorEx(OUT_BC, SPEED, 180, 100, true, true);
 
-     avg_count = 1;
      OnFwdReg(OUT_BC, 10, OUT_REGMODE_SPEED);
  
-     WHITE_AVG = calculateTileAvg() - WHITE_ERROR;
-     
+     WHITE_AVG = calculateTileAvg();
+     WHITE_GREY_THRESHOLD = (WHITE_AVG + GREY_AVG)/2;
+
+     //debugPrint();
      moveForwardWhite();
-     RotateMotorEx(OUT_BC, SPEED, 180, 100, true, true);
    
 }
 
+void debugPrint(float avg){
+     while(true){
+        //NumOut(2, 2, WHITE_AVG);
+        //NumOut(2, 32, GREY_AVG);
+
+        NumOut(2, 2, BLACK_GREY_THRESHOLD);
+        NumOut(2, 12, WHITE_GREY_THRESHOLD);
+        NumOut(2, 22, avg);
+     }
+}
 
 void moveToFinish(){
      OnFwdReg(OUT_BC, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
@@ -74,29 +85,31 @@ void moveToFinish(){
 }
 
 void moveForwardBlack() {
-     
+
+     int avg;
      OnFwdReg(OUT_BC, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
-     count++;
-     if (count == 15) {
+     black_count++;
+     if (black_count == 15) {
 
         return;
      }
-     while (SENSOR_1 < BLACK_THRESHOLD) {}
-     if(SENSOR_1 < WHITE_AVG){
-         // on gray
-         correctPath(BLACK);   
-     }else{
-         moveForwardWhite();
+     while (SENSOR_1 < BLACK_GREY_THRESHOLD) {}
+     avg = calculateTileAvg();
+     if(avg > WHITE_GREY_THRESHOLD){
+         moveForwardWhite(); 
+     }
+     else{
+         correctPath(BLACK);
      }
 }
 
 float calculateTileAvg() {
 
-     int count = 1;
+     int count = 0;
      int avg = 0;
      while(count <= AVG_COUNT) {
 
-        if (SENSOR_1 > BLACK_THRESHOLD) {
+        if (SENSOR_1 > BLACK_GREY_THRESHOLD) {
 
            Wait(AVG_WAIT);
            avg += SENSOR_1;
@@ -111,37 +124,73 @@ float calculateTileAvg() {
 void moveForwardWhite() {
 
      OnFwdReg(OUT_BC, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
-     while (SENSOR_1 > WHITE_AVG) {}
-     if(SENSOR_1 > BLACK_THRESHOLD){
-         correctPath(WHITE);
-     }else{
-         moveForwardBlack();
+     while (SENSOR_1 > WHITE_GREY_THRESHOLD) {}
+     if(SENSOR_1 < BLACK_GREY_THRESHOLD){
+         Wait(100);
+         if(SENSOR_1 < BLACK_GREY_THRESHOLD) {
+            moveForwardBlack();
+         }
+         else {
+             correctPath(WHITE); 
+         }
+     }
+     else {
+
+         correctPath(WHITE); // Most likely never reach this part of the code.
      }
 }
 
 void correctPath(COLOUR from){
+     OnRevReg(OUT_BC, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
+     while(SENSOR_1 > BLACK_GREY_THRESHOLD){}
+     //now we are on grey line
+     
      OnFwdReg(OUT_B, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
-     OnFwdReg(OUT_C, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
+     OnRevReg(OUT_C, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
+
      int count = 0;
-     while(SENSOR_1 > BLACK_THRESHOLD && SENSOR_1 < WHITE_AVG && count < ROTATE_ATTEMPTS){
+     while(SENSOR_1 < BLACK_GREY_THRESHOLD && count < ROTATE_ATTEMPTS){
           count++;
           Wait(10);
      }
-     if(count == ROTATE_ATTEMPTS){
-          OnRevReg(OUT_B, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
-          OnFwdReg(OUT_C, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
-          while(SENSOR_1 > BLACK_THRESHOLD && SENSOR_1 < WHITE_AVG){
-              Wait(10);
+     if(SENSOR_1 > BLACK_GREY_THRESHOLD){
+          // on grey or white tile
+          float avg = calculateTileAvg();
+          if(avg > WHITE_GREY_THRESHOLD){
+              // we are on the white
+              // rotate back a little bit
+              OnRevReg(OUT_B, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
+              OnFwdReg(OUT_C, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
+              Wait(ROTATE_WHITE_CORRECT_WAIT);
+              moveForwardWhite();
+          }
+          else{
+              debugPrint(avg);
+              // we are on grey(we picked the wrong direction) 
+              OnRevReg(OUT_B, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
+              OnFwdReg(OUT_C, SPEED, OUT_REGMODE_SYNC | OUT_REGMODE_SPEED);
+              while(SENSOR_1 > BLACK_GREY_THRESHOLD){}
+              Wait(ROTATE_CORRECT_WAIT);
+              if(SENSOR_1 > BLACK_GREY_THRESHOLD){
+                  moveForwardWhite();
+              }
+              else{
+                  // is on black
+                  // move forward inc counts so if from BLACK cancel out that inc
+                  if(from == BLACK){
+                      black_count--;
+                  }
+                  moveForwardBlack();
+              }
           }
      }
-     Wait(50);
-     if(SENSOR_1 <= BLACK_THRESHOLD){
+     else {
+         // is on black
+         // move forward inc counts so if from BLACK cancel out that inc
          if(from == BLACK){
-             count--;
+             black_count--;
          }
          moveForwardBlack();
-     }else{
-         moveForwardWhite();
      }
 }
 
